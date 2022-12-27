@@ -3,29 +3,85 @@ import jax.numpy as jnp
 import numpy as np
 from functools import partial
 
+import typing
+
 import ca_utils as ca
 
 
-def rule_to_joint(r_arr):
-    ns = r_arr.shape[1]
+@partial(jax.jit, static_argnames=("log",))
+def rule_to_joint(
+    r_arr: typing.Union[np.ndarray, jnp.ndarray],
+    log: bool = False
+) -> jnp.ndarray:
+    """
+    Convert rule array to joint probability array.
 
-    result = np.zeros((ns, ns, ns ** 4))
+    Convert a 2d array representing a probabilistic
+    CA rule into a 3d array representing the joint
+    probability of CA states given the preceding state.
 
-    for i in range(ns):
-        for j in range(ns):
-            for k in range(ns ** 4):
-                b_arr = ca.number_to_base(k, base=ns, width=4)
-                ln = ca.base_to_number(b_arr[:3], base=ns)
-                rn = ca.base_to_number(b_arr[1:], base=ns)
+    Args:
+        r_arr: 2d probabilistic rule array.
+        log: If ``True`` ``r_arr`` will be treated as
+            an array of log probabilities.
 
-                p = r_arr[ln, i] * r_arr[rn, j]
+    Returns:
+        jnp.ndarray: 2d array of joint probabilities
+            of state pairs from preceding states.
+    """
+    n_states = r_arr.shape[1]
 
-                result[i, j, k] = p
+    idxs_4 = jnp.array(
+        [
+            ca.number_to_base(i, base=n_states, width=4)
+            for i in range(n_states ** 4)
+        ]
+    )
 
-    return result
+    idxs_2 = jnp.array(
+        [
+            ca.number_to_base(i, base=n_states, width=2)[::-1]
+            for i in range(n_states ** 2)
+        ]
+    )
+
+    pows = (n_states ** np.arange(3))[np.newaxis]
+
+    if log:
+        r_arr = (
+            r_arr -
+            jax.scipy.special.logsumexp(r_arr, axis=1)[:, jnp.newaxis]
+        )
+    else:
+        r_arr = r_arr / jnp.sum(r_arr, axis=1)[:, jnp.newaxis]
+
+    def inner_unroll(i):
+        s1, s2 = i
+        ln = jnp.sum(idxs_4[:, :3] * pows, axis=1)
+        rn = jnp.sum(idxs_4[:, 1:] * pows, axis=1)
+
+        if log:
+            return r_arr.at[ln, s1].get() + r_arr.at[rn, s2].get()
+        else:
+            return r_arr.at[ln, s1].get() * r_arr.at[rn, s2].get()
+
+    return jax.vmap(inner_unroll)(idxs_2).reshape(n_states, n_states, -1)
 
 
-def state_to_joint(s0):
+def state_to_joint(s0: np.ndarray) -> np.ndarray:
+    """
+    Convert an initial state to joint probability array.
+
+    Convert a 2d probabilistic initial state array to
+    a 3d array of joint probabilities of adjacent
+    state of the initial state.
+
+    Args:
+        s0: 2d array of probabilistic initial state.
+
+    Returns:
+        np.ndarray: 3d array of joint probabilities.
+    """
     w = s0.shape[1]
     n = s0.shape[0]
 
@@ -42,7 +98,34 @@ def state_to_joint(s0):
 
 
 @partial(jax.jit, static_argnames=("n_steps", "log_prob"))
-def run_model(rule_joint, p0, n_steps, log_prob=False):
+def run_model(
+    rule_joint: jnp.ndarray,
+    p0: jnp.ndarray,
+    n_steps: int,
+    log_prob=False
+) -> typing.Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """
+    Run CA and return time-series of state and stats.
+
+    Run CA for ``n_steps`` from initial state and joint
+    probability rule. Return tuple containing the
+    series of joint probabilities, probabilities of individual
+    states and mutual information.
+
+    Args:
+        rule_joint: Probabilistic CA rule represented
+            as joint probability.
+        p0: Initial state as joint probability.
+        n_steps: Number of steps to run CA for
+        log_prob: If ``True`` the update rule and states
+            will be treated as log probabilities.
+
+    Returns:
+        typing.Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+            Tuple containing time-series of joint probabilities,
+             probabilities of individual states and mutual
+             information over execution of the CA.
+    """
 
     w = p0.shape[2]
     n_states = rule_joint.shape[0]
