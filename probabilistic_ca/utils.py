@@ -1,17 +1,75 @@
+import typing
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 import numpy as np
-from functools import partial
 
-import typing
 
-import ca_utils as ca
+def number_to_base(n: int, *, base: int, width: int) -> np.array:
+    """
+    Convert a number into it's representation in argument weight and
+    fixed width
+
+    Args:
+        n (int): Number to convert
+        base (int): Base to represent number in
+        width (int): Width of presentation (padding with 0s)
+
+    Returns:
+        np.array: Array of digits
+    """
+    if n > (base**width) - 1:
+        raise ValueError(
+            (
+                f"{n} is outside the allotted width {width} "
+                "of the representation in base {base}"
+            )
+        )
+    ret = np.zeros(width).astype("int")
+    idx = 0
+    while n:
+        ret[idx] = int(n % base)
+        n //= base
+        idx += 1
+    return ret
+
+
+def rule_arr(n, idxs=None, perbs=None):
+    """
+    Generate an array representing a ca-rule with possible deviations from that
+    rule to create probabilistic update rules
+
+    Args:
+        n (int): Rule number to use as a base rule
+        idxs (list): List of indices to apply perturbations
+        perbs (list): List of perturbations corresponding to the indices list
+
+    Returns:
+        np.array: 2-D array representing the CA rule
+    """
+    idxs = idxs or ()
+    perbs = perbs or ()
+
+    assert len(idxs) == len(
+        perbs
+    ), "Index and perturbation lists must be the same length"
+
+    r = number_to_base(n, base=2, width=8).astype("float")
+
+    for j, k in zip(idxs, perbs):
+        r[j] = r[j] - k if r[j] > 0 else r[j] + k
+
+    rp = np.zeros((8, 2))
+    rp[:, 1] = r
+    rp[:, 0] = 1 - rp[:, 1]
+
+    return rp
 
 
 @partial(jax.jit, static_argnames=("log_prob",))
 def rule_to_joint(
-    r_arr: typing.Union[np.ndarray, jnp.ndarray],
-    log_prob: bool = True
+    r_arr: typing.Union[np.ndarray, jnp.ndarray], log_prob: bool = True
 ) -> jnp.ndarray:
     """
     Convert rule array to joint probability array.
@@ -32,26 +90,17 @@ def rule_to_joint(
     n_states = r_arr.shape[1]
 
     idxs_4 = jnp.array(
-        [
-            ca.number_to_base(i, base=n_states, width=4)
-            for i in range(n_states ** 4)
-        ]
+        [number_to_base(i, base=n_states, width=4) for i in range(n_states**4)]
     )
 
     idxs_2 = jnp.array(
-        [
-            ca.number_to_base(i, base=n_states, width=2)[::-1]
-            for i in range(n_states ** 2)
-        ]
+        [number_to_base(i, base=n_states, width=2)[::-1] for i in range(n_states**2)]
     )
 
     pows = (n_states ** np.arange(3))[np.newaxis]
 
     if log_prob:
-        r_arr = (
-            r_arr -
-            jax.scipy.special.logsumexp(r_arr, axis=1)[:, jnp.newaxis]
-        )
+        r_arr = r_arr - jax.scipy.special.logsumexp(r_arr, axis=1)[:, jnp.newaxis]
     else:
         r_arr = r_arr / jnp.sum(r_arr, axis=1)[:, jnp.newaxis]
 
@@ -86,7 +135,7 @@ def state_to_joint(s0: np.ndarray) -> np.ndarray:
     n = s0.shape[0]
 
     p = s0 / np.sum(s0, axis=0)
-    ps = p.take(np.arange(1, w + 1), mode='wrap', axis=1)
+    ps = p.take(np.arange(1, w + 1), mode="wrap", axis=1)
 
     p0 = np.zeros((n, n, w))
 
@@ -131,20 +180,15 @@ def run_model(
     n_states = rule_joint.shape[0]
 
     idxs_4 = np.array(
-        [
-            ca.number_to_base(i, base=n_states, width=4)
-            for i in range(n_states ** 4)
-        ]
+        [number_to_base(i, base=n_states, width=4) for i in range(n_states**4)]
     )
 
     idxs_2 = np.array(
-        [
-            ca.number_to_base(i, base=n_states, width=2)[::-1]
-            for i in range(n_states ** 2)
-        ]
+        [number_to_base(i, base=n_states, width=2)[::-1] for i in range(n_states**2)]
     )
 
     if log_prob:
+
         def p_joint(p, s):
             s0, s1, s2, s3 = s
             pl = p[s0, s1].take(jnp.arange(-1, w - 1), mode="wrap", axis=0)
@@ -156,7 +200,9 @@ def run_model(
             pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=0)
 
             return pl + pr + pn - (pd1 + pd2)
+
     else:
+
         def p_joint(p, s):
             s0, s1, s2, s3 = s
             pl = p[s0, s1].take(jnp.arange(-1, w - 1), mode="wrap", axis=0)
@@ -168,9 +214,10 @@ def run_model(
             pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=0)
             pd = pd1 * pd2
 
-            return jnp.where(pd != 0, pl * pr * pn / pd, 0.)
+            return jnp.where(pd != 0, pl * pr * pn / pd, 0.0)
 
     if log_prob:
+
         def step(carry, _):
             p, r = carry
 
@@ -185,7 +232,9 @@ def run_model(
             p = p.reshape((n_states, n_states, -1))
 
             return (p, r), p
+
     else:
+
         def step(carry, _):
             p, r = carry
 
@@ -227,23 +276,18 @@ def mutual_information(
     w = probs.shape[3]
 
     idxs_2 = np.array(
-        [
-            ca.number_to_base(i, base=n_states, width=2)[::-1]
-            for i in range(n_states ** 2)
-        ]
+        [number_to_base(i, base=n_states, width=2)[::-1] for i in range(n_states**2)]
     )
 
     if log_prob:
+
         def inner_mutual_info(i):
             s1, s2 = i
             pd1 = jax.scipy.special.logsumexp(probs[:, s1], axis=1)
             pd2 = jax.scipy.special.logsumexp(probs[:, s2], axis=1)
             pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=1)
 
-            return (
-                    jnp.exp(probs[:, s1, s2]) *
-                    (probs[:, s1, s2] - (pd1 + pd2))
-            )
+            return jnp.exp(probs[:, s1, s2]) * (probs[:, s1, s2] - (pd1 + pd2))
 
     else:
 
@@ -253,10 +297,7 @@ def mutual_information(
             pd2 = jnp.sum(probs[:, s2], axis=1)
             pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=1)
 
-            return (
-                    probs[:, s1, s2] *
-                    jnp.log(probs[:, s1, s2] / (pd1 * pd2))
-            )
+            return probs[:, s1, s2] * jnp.log(probs[:, s1, s2] / (pd1 * pd2))
 
     mi = jax.vmap(inner_mutual_info)(idxs_2)
     return jnp.sum(mi, axis=0)
