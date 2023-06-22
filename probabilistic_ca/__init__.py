@@ -1,9 +1,3 @@
-from .utils import (
-    entropy,
-    mutual_information,
-    rule_arr,
-    rule_to_joint,
-    run_model,
-    state_probabilities,
-    state_to_joint,
-)
+from .metrics import entropy, mutual_information, state_probabilities
+from .model import run_model
+from .utils import rule_arr, rule_to_joint, state_to_joint
