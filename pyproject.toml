@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "probabilistic-ca"
+version = "0.1.0"
+description = "Implimentation of a probabilistic cellular automata"
+authors = ["zombie-einstein <zombie-einstein@proton.me>"]
+readme = "README.md"
+packages = [{include = "probabilistic_ca"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+jax = "^0.4.12"
+
+[tool.poetry.group.dev.dependencies]
+matplotlib = "^3.7.1"
+jupyter = "^1.0.0"
+taskipy = "^1.11.0"
+pre-commit = "^3.3.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.taskipy.tasks]
+test = { cmd = "pytest", help="Run tests"}
+lint = { cmd = "pre-commit run --all-files", help="Code format checks"}
