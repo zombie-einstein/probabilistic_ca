@@ -767,6 +767,21 @@ minimum-jaxlib = ["jaxlib (==0.4.11)"]
 tpu = ["jaxlib (==0.4.12)", "libtpu-nightly (==0.1.dev20230608)"]
 
 [[package]]
+name = "jax-tqdm"
+version = "0.1.1"
+description = "Tqdm progress bar for JAX scans and loops"
+optional = false
+python-versions = ">=3.8,<4.0"
+files = [
+    {file = "jax_tqdm-0.1.1-py3-none-any.whl", hash = "sha256:5f3ca93edd82839c35f745b58005f602a5177f9ea170a4cd6d42b362e01b3942"},
+    {file = "jax_tqdm-0.1.1.tar.gz", hash = "sha256:4ae95a1920140e28467e9b187e2ca8c11a3d385e2a0d6bb608ecb62e2ad36c78"},
+]
+
+[package.dependencies]
+jax = ">=0.3.5"
+tqdm = ">=4.64.1,<5.0.0"
+
+[[package]]
 name = "jedi"
 version = "0.18.2"
 description = "An autocompletion tool for Python that can be used for text editors."
@@ -2358,6 +2373,26 @@ files = [
 ]
 
 [[package]]
+name = "tqdm"
+version = "4.65.0"
+description = "Fast, Extensible Progress Meter"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "tqdm-4.65.0-py3-none-any.whl", hash = "sha256:c4f53a17fe37e132815abceec022631be8ffe1b9381c2e6e30aa70edc99e9671"},
+    {file = "tqdm-4.65.0.tar.gz", hash = "sha256:1871fb68a86b8fb3b59ca4cdd3dcccbc7e6d613eeed31f4c332531977b89beb5"},
+]
+
+[package.dependencies]
+colorama = {version = "*", markers = "platform_system == \"Windows\""}
+
+[package.extras]
+dev = ["py-make (>=0.1.0)", "twine", "wheel"]
+notebook = ["ipywidgets (>=6)"]
+slack = ["slack-sdk"]
+telegram = ["requests"]
+
+[[package]]
 name = "traitlets"
 version = "5.9.0"
 description = "Traitlets Python configuration system"
@@ -2499,4 +2534,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "1362bef61a40f6b152d292cdd3d8632a8247aff0d41cb97d10b8e74f76c8efd2"
+content-hash = "cf940675c57edace8cba6b9f4a54f961c17aaa2be132ebf01b4475e64c2dddac"
