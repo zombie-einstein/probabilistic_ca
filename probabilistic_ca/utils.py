@@ -8,7 +8,7 @@ import numpy as np
 
 def number_to_base(n: int, *, base: int, width: int) -> np.array:
     """
-    Convert a number into it's representation in argument weight and
+    Convert a number into it's representation in argument base and
     fixed width
 
     Args:
@@ -35,34 +35,33 @@ def number_to_base(n: int, *, base: int, width: int) -> np.array:
     return ret
 
 
-def rule_arr(n, idxs=None, perbs=None):
+def rule_arr(n, base=2, noise: np.array = None):
     """
     Generate an array representing a ca-rule with possible deviations from that
     rule to create probabilistic update rules
 
     Args:
         n (int): Rule number to use as a base rule
-        idxs (list): List of indices to apply perturbations
-        perbs (list): List of perturbations corresponding to the indices list
+        base (int): Rule possible states, default 2
+        noise (np.array): Noise to add as perturbation to rule
 
     Returns:
         np.array: 2-D array representing the CA rule
     """
-    idxs = idxs or ()
-    perbs = perbs or ()
+    n_states = base ** 3
+    out_shape = (n_states, base)
 
-    assert len(idxs) == len(
-        perbs
-    ), "Index and perturbation lists must be the same length"
+    noise = np.zeros(out_shape) if noise is None else noise
+    assert noise.shape == out_shape, f"Noise should have shape {out_shape}"
 
-    r = number_to_base(n, base=2, width=8).astype("float")
+    r = number_to_base(n, base=base, width=n_states)
 
-    for j, k in zip(idxs, perbs):
-        r[j] = r[j] - k if r[j] > 0 else r[j] + k
-
-    rp = np.zeros((8, 2))
-    rp[:, 1] = r
-    rp[:, 0] = 1 - rp[:, 1]
+    rp = np.zeros((n_states, base))
+    rp[np.arange(n_states), r] = 1.0
+    noise[np.arange(n_states), r] = 0.0
+    rp = rp + noise
+    norm = np.sum(rp, axis=1)
+    rp = rp / norm[:, np.newaxis]
 
     return rp
 
