@@ -5,10 +5,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+OFFSET = 1e-14
+
 
 def number_to_base(n: int, *, base: int, width: int) -> np.array:
     """
-    Convert a number into it's representation in argument weight and
+    Convert a number into it's representation in argument base and
     fixed width
 
     Args:
@@ -35,34 +37,48 @@ def number_to_base(n: int, *, base: int, width: int) -> np.array:
     return ret
 
 
-def rule_arr(n, idxs=None, perbs=None):
+def rule_arr(
+    n,
+    base=2,
+    perturbations: np.array = None,
+    log_prob: bool = True,
+    offset: float = OFFSET,
+) -> np.array:
     """
     Generate an array representing a ca-rule with possible deviations from that
     rule to create probabilistic update rules
 
     Args:
         n (int): Rule number to use as a base rule
-        idxs (list): List of indices to apply perturbations
-        perbs (list): List of perturbations corresponding to the indices list
+        base (int): Rule possible states, default 2
+        perturbations (jnp.array): Noise to add as perturbation to rule
+        log_prob (bool): If true small perturbations will be added
+            to zero values to avoid logarithm issues
+        offset (float): Value to offset by if `log_prob=True`
+
 
     Returns:
         np.array: 2-D array representing the CA rule
     """
-    idxs = idxs or ()
-    perbs = perbs or ()
+    n_states = base**3
+    out_shape = (n_states, base)
 
-    assert len(idxs) == len(
-        perbs
-    ), "Index and perturbation lists must be the same length"
+    perturbations = jnp.zeros(out_shape) if perturbations is None else perturbations
+    assert perturbations.shape == out_shape, f"Noise should have shape {out_shape}"
 
-    r = number_to_base(n, base=2, width=8).astype("float")
+    r = number_to_base(n, base=base, width=n_states)
 
-    for j, k in zip(idxs, perbs):
-        r[j] = r[j] - k if r[j] > 0 else r[j] + k
+    rp = np.zeros((n_states, base))
+    rp[np.arange(n_states), r] = 1.0
+    rp = rp + perturbations
 
-    rp = np.zeros((8, 2))
-    rp[:, 1] = r
-    rp[:, 0] = 1 - rp[:, 1]
+    if log_prob:
+        rp = np.clip(rp, offset, 1.0 - offset)
+        norm = np.sum(rp, axis=1)
+        rp = rp / norm[:, np.newaxis]
+    else:
+        norm = np.sum(rp, axis=1)
+        rp = rp / norm[:, np.newaxis]
 
     return rp
 
@@ -117,7 +133,11 @@ def rule_to_joint(
     return jax.vmap(inner_unroll)(idxs_2).reshape(n_states, n_states, -1)
 
 
-def state_to_joint(s0: np.ndarray) -> np.ndarray:
+def state_to_joint(
+    s0: np.ndarray,
+    log_prob=True,
+    offset: float = OFFSET,
+) -> np.ndarray:
     """
     Convert an initial state to joint probability array.
 
@@ -127,6 +147,8 @@ def state_to_joint(s0: np.ndarray) -> np.ndarray:
 
     Args:
         s0: 2d array of probabilistic initial state.
+        log_prob: `True` if using log-probabilities
+        offset: Offset applied to log probabilities
 
     Returns:
         np.ndarray: 3d array of joint probabilities.
@@ -134,13 +156,19 @@ def state_to_joint(s0: np.ndarray) -> np.ndarray:
     w = s0.shape[1]
     n = s0.shape[0]
 
-    p = s0 / np.sum(s0, axis=0)
-    ps = p.take(np.arange(1, w + 1), mode="wrap", axis=1)
+    if log_prob:
+        s0 = np.clip(s0, offset, 1.0 - offset)
 
+    p = s0 / np.sum(s0, axis=0)
+
+    ps = p.take(np.arange(1, w + 1), mode="wrap", axis=1)
     p0 = np.zeros((n, n, w))
 
     for i in range(n):
         for j in range(n):
             p0[i, j] = p[i] * ps[j]
 
-    return p0
+    if log_prob:
+        return np.log(p0)
+    else:
+        return p0
