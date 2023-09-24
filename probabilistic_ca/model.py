@@ -62,23 +62,6 @@ def run_model(
 
             return pl + pr + pn - (pd1 + pd2)
 
-    else:
-
-        def p_joint(p, s):
-            s0, s1, s2, s3 = s
-            pl = p[s0, s1].take(jnp.arange(-1, w - 1), mode="wrap", axis=0)
-            pr = p[s2, s3].take(jnp.arange(1, w + 1), mode="wrap", axis=0)
-            pn = p[s1, s2]
-
-            pd1 = jnp.sum(p[s1], axis=0)
-            pd2 = jnp.sum(p[s2], axis=0)
-            pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=0)
-            pd = pd1 * pd2
-
-            return jnp.where(pd != 0, pl * pr * pn / pd, 0.0)
-
-    if log_prob:
-
         def step(carry, _):
             p, r = carry
 
@@ -95,6 +78,19 @@ def run_model(
             return (p, r), p
 
     else:
+
+        def p_joint(p, s):
+            s0, s1, s2, s3 = s
+            pl = p[s0, s1].take(jnp.arange(-1, w - 1), mode="wrap", axis=0)
+            pr = p[s2, s3].take(jnp.arange(1, w + 1), mode="wrap", axis=0)
+            pn = p[s1, s2]
+
+            pd1 = jnp.sum(p[s1], axis=0)
+            pd2 = jnp.sum(p[s2], axis=0)
+            pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=0)
+            pd = pd1 * pd2
+
+            return jnp.where(pd != 0, pl * pr * pn / pd, 0.0)
 
         def step(carry, _):
             p, r = carry

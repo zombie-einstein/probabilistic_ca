@@ -64,7 +64,9 @@ def rule_arr(
     out_shape = (n_states, base)
 
     perturbations = jnp.zeros(out_shape) if perturbations is None else perturbations
-    assert perturbations.shape == out_shape, f"Noise should have shape {out_shape}"
+    assert (
+        perturbations.shape == out_shape
+    ), f"Noise should have shape {out_shape} got {perturbations.shape}"
 
     r = number_to_base(n, base=base, width=n_states)
 
@@ -133,11 +135,12 @@ def rule_to_joint(
     return jax.vmap(inner_unroll)(idxs_2).reshape(n_states, n_states, -1)
 
 
+@partial(jax.jit, static_argnames=("log_prob",))
 def state_to_joint(
-    s0: np.ndarray,
+    s0: jnp.ndarray,
     log_prob=True,
     offset: float = OFFSET,
-) -> np.ndarray:
+) -> jnp.ndarray:
     """
     Convert an initial state to joint probability array.
 
@@ -151,24 +154,23 @@ def state_to_joint(
         offset: Offset applied to log probabilities
 
     Returns:
-        np.ndarray: 3d array of joint probabilities.
+        jnp.ndarray: 3d array of joint probabilities.
     """
     w = s0.shape[1]
     n = s0.shape[0]
 
     if log_prob:
-        s0 = np.clip(s0, offset, 1.0 - offset)
+        s0 = jnp.clip(s0, offset, 1.0 - offset)
 
-    p = s0 / np.sum(s0, axis=0)
+    p = s0 / jnp.sum(s0, axis=0)
 
-    ps = p.take(np.arange(1, w + 1), mode="wrap", axis=1)
-    p0 = np.zeros((n, n, w))
+    ps = jnp.take(p, jnp.arange(1, w + 1), mode="wrap", axis=1)
 
-    for i in range(n):
-        for j in range(n):
-            p0[i, j] = p[i] * ps[j]
+    p0 = jax.vmap(lambda i: jax.vmap(lambda j: p[i] * ps[j])(jnp.arange(n)))(
+        jnp.arange(n)
+    )
 
     if log_prob:
-        return np.log(p0)
+        return jnp.log(p0)
     else:
         return p0
