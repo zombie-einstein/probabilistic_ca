@@ -1,14 +1,15 @@
-import typing
 from functools import partial
+from typing import Optional
 
+import chex
 import jax
 import jax.numpy as jnp
-import numpy as np
+from jax.experimental import checkify
 
 OFFSET = 1e-14
 
 
-def number_to_base(n: int, *, base: int, width: int) -> np.array:
+def number_to_base(n: int, *, base: int, width: int) -> chex.Array:
     """
     Convert a number into it's representation in argument base and
     fixed width
@@ -19,31 +20,33 @@ def number_to_base(n: int, *, base: int, width: int) -> np.array:
         width (int): Width of presentation (padding with 0s)
 
     Returns:
-        np.array: Array of digits
+        Array of digits
     """
-    if n > (base**width) - 1:
-        raise ValueError(
-            (
-                f"{n} is outside the allotted width {width} "
-                "of the representation in base {base}"
-            )
-        )
-    ret = np.zeros(width).astype("int")
-    idx = 0
-    while n:
-        ret[idx] = int(n % base)
-        n //= base
-        idx += 1
+
+    checkify.check(
+        n < (base**width),
+        "{n} is outside the allotted width {w}",
+        n=jnp.int32(n),
+        w=jnp.int32(width),
+    )
+
+    def inner(m, _):
+        i = m % base
+        m //= base
+        return m, i
+
+    _, ret = jax.lax.scan(inner, n, None, length=width)
+
     return ret
 
 
 def rule_arr(
     n,
     base=2,
-    perturbations: np.array = None,
+    perturbations: Optional[chex.Array] = None,
     log_prob: bool = True,
     offset: float = OFFSET,
-) -> np.array:
+) -> chex.Array:
     """
     Generate an array representing a ca-rule with possible deviations from that
     rule to create probabilistic update rules
@@ -56,9 +59,8 @@ def rule_arr(
             to zero values to avoid logarithm issues
         offset (float): Value to offset by if `log_prob=True`
 
-
     Returns:
-        np.array: 2-D array representing the CA rule
+        2-D array representing the CA rule
     """
     n_states = base**3
     out_shape = (n_states, base)
@@ -70,25 +72,24 @@ def rule_arr(
 
     r = number_to_base(n, base=base, width=n_states)
 
-    rp = np.zeros((n_states, base))
-    rp[np.arange(n_states), r] = 1.0
+    rp = jnp.zeros(out_shape)
+    rp = rp.at[jnp.arange(n_states), r].set(1.0)
     rp = rp + perturbations
 
     if log_prob:
-        rp = np.clip(rp, offset, 1.0 - offset)
-        norm = np.sum(rp, axis=1)
-        rp = rp / norm[:, np.newaxis]
-    else:
-        norm = np.sum(rp, axis=1)
-        rp = rp / norm[:, np.newaxis]
+        rp = jnp.clip(rp, offset, 1.0 - offset)
+
+    norm = jnp.sum(rp, axis=1)
+    rp = rp / norm[:, jnp.newaxis]
+
+    if log_prob:
+        rp = jnp.log(rp)
 
     return rp
 
 
 @partial(jax.jit, static_argnames=("log_prob",))
-def rule_to_joint(
-    r_arr: typing.Union[np.ndarray, jnp.ndarray], log_prob: bool = True
-) -> jnp.ndarray:
+def rule_to_joint(r_arr: chex.Array, log_prob: bool = True) -> chex.Array:
     """
     Convert rule array to joint probability array.
 
@@ -107,18 +108,16 @@ def rule_to_joint(
     """
     n_states = r_arr.shape[1]
 
-    idxs_4 = jnp.array(
-        [number_to_base(i, base=n_states, width=4) for i in range(n_states**4)]
-    )
+    f4 = checkify.checkify(partial(number_to_base, base=n_states, width=4))
+    f2 = checkify.checkify(partial(number_to_base, base=n_states, width=2))
 
-    idxs_2 = jnp.array(
-        [number_to_base(i, base=n_states, width=2)[::-1] for i in range(n_states**2)]
-    )
-
-    pows = (n_states ** np.arange(3))[np.newaxis]
+    errs, idxs_4 = jax.vmap(f4)(jnp.arange(n_states**4))
+    errs, idxs_2 = jax.vmap(f2)(jnp.arange(n_states**2))
+    idxs_2 = jnp.flip(idxs_2, axis=1)
+    pows = (n_states ** jnp.arange(3))[jnp.newaxis]
 
     if log_prob:
-        r_arr = r_arr - jax.scipy.special.logsumexp(r_arr, axis=1)[:, jnp.newaxis]
+        r_arr = r_arr - jax.nn.logsumexp(r_arr, axis=1)[:, jnp.newaxis]
     else:
         r_arr = r_arr / jnp.sum(r_arr, axis=1)[:, jnp.newaxis]
 

@@ -35,8 +35,8 @@ def mutual_information(
 
         def inner_mutual_info(i):
             s1, s2 = i
-            pd1 = jax.scipy.special.logsumexp(probs[:, s1], axis=1)
-            pd2 = jax.scipy.special.logsumexp(probs[:, s2], axis=1)
+            pd1 = jax.nn.logsumexp(probs[:, s1], axis=1)
+            pd2 = jax.nn.logsumexp(probs[:, s2], axis=1)
             pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=1)
 
             return jnp.exp(probs[:, s1, s2]) * (probs[:, s1, s2] - (pd1 + pd2))
@@ -73,7 +73,7 @@ def state_probabilities(
     """
 
     if log_prob:
-        return jax.scipy.special.logsumexp(probs, axis=1)
+        return jax.nn.logsumexp(probs, axis=1)
 
     else:
         return jnp.sum(probs, axis=2)
