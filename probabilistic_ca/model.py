@@ -2,7 +2,7 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
-import numpy as np
+from jax.experimental import checkify
 
 from .utils import number_to_base
 
@@ -40,13 +40,12 @@ def run_model(
     w = p0.shape[2]
     n_states = rule_joint.shape[0]
 
-    idxs_4 = np.array(
-        [number_to_base(i, base=n_states, width=4) for i in range(n_states**4)]
-    )
+    f4 = checkify.checkify(partial(number_to_base, base=n_states, width=4))
+    f2 = checkify.checkify(partial(number_to_base, base=n_states, width=2))
 
-    idxs_2 = np.array(
-        [number_to_base(i, base=n_states, width=2)[::-1] for i in range(n_states**2)]
-    )
+    errs, idxs_4 = jax.vmap(f4)(jnp.arange(n_states**4))
+    errs, idxs_2 = jax.vmap(f2)(jnp.arange(n_states**2))
+    idxs_2 = jnp.flip(idxs_2, axis=1)
 
     if log_prob:
 

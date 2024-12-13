@@ -113,7 +113,6 @@ def rule_to_joint(r_arr: chex.Array, log_prob: bool = True) -> chex.Array:
 
     errs, idxs_4 = jax.vmap(f4)(jnp.arange(n_states**4))
     errs, idxs_2 = jax.vmap(f2)(jnp.arange(n_states**2))
-
     idxs_2 = jnp.flip(idxs_2, axis=1)
     pows = (n_states ** jnp.arange(3))[jnp.newaxis]
 

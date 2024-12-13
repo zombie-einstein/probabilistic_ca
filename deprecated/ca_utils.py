@@ -84,7 +84,6 @@ def joint_probability_map(r_array):
     ret = np.zeros((n_states, n_states, n_states**4, 5))
 
     for i in range(0, n_states**2):
-
         k = number_to_base(i, base=n_states, width=2)
 
         for j in range(n_states**4):
