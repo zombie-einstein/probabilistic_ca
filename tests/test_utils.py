@@ -28,6 +28,12 @@ def test_number_to_base(n: int, expected: List[float]):
     assert jnp.array_equal(arr, expected)
 
 
+def test_permutations():
+    perms = utils.permutations(2, 2)
+    expected = jnp.array([[0, 0], [1, 0], [0, 1], [1, 1]])
+    assert jnp.array_equal(perms, expected)
+
+
 @pytest.mark.parametrize("log_prob", [True, False])
 @pytest.mark.parametrize("base", [2, 3])
 def test_rule_arr(key: chex.PRNGKey, log_prob: bool, base: int):
