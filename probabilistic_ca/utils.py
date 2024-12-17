@@ -11,7 +11,7 @@ OFFSET = 1e-14
 
 def number_to_base(n: int, *, base: int, width: int) -> chex.Array:
     """
-    Convert a number into it's representation in argument base and
+    Convert a number into its representation in argument base and
     fixed width
 
     Args:
@@ -40,6 +40,22 @@ def number_to_base(n: int, *, base: int, width: int) -> chex.Array:
     return ret
 
 
+def permutations(n_states: int, width: int) -> chex.Array:
+    """
+    Generate all the permutations of states for a given width
+
+    Args:
+        n_states (int): Number of states
+        width (int): Width of output
+
+    Returns:
+        Array of permutations of states
+    """
+    f = partial(number_to_base, base=n_states, width=width)
+    perms = jax.vmap(f)(jnp.arange(n_states**width))
+    return perms
+
+
 def rule_arr(
     n,
     base=2,
@@ -64,11 +80,12 @@ def rule_arr(
     """
     n_states = base**3
     out_shape = (n_states, base)
-
     perturbations = jnp.zeros(out_shape) if perturbations is None else perturbations
-    assert (
-        perturbations.shape == out_shape
-    ), f"Noise should have shape {out_shape} got {perturbations.shape}"
+
+    if isinstance(perturbations, chex.Array):
+        assert (
+            perturbations.shape == out_shape
+        ), f"Noise should have shape {out_shape} got {perturbations.shape}"
 
     r = number_to_base(n, base=base, width=n_states)
 
@@ -107,12 +124,9 @@ def rule_to_joint(r_arr: chex.Array, log_prob: bool = True) -> chex.Array:
             of state pairs from preceding states.
     """
     n_states = r_arr.shape[1]
-
-    f4 = checkify.checkify(partial(number_to_base, base=n_states, width=4))
-    f2 = checkify.checkify(partial(number_to_base, base=n_states, width=2))
-
-    errs, idxs_4 = jax.vmap(f4)(jnp.arange(n_states**4))
-    errs, idxs_2 = jax.vmap(f2)(jnp.arange(n_states**2))
+    f_perms = checkify.checkify(permutations)
+    errs, idxs_4 = f_perms(n_states, 4)
+    errs, idxs_2 = f_perms(n_states, 2)
     idxs_2 = jnp.flip(idxs_2, axis=1)
     pows = (n_states ** jnp.arange(3))[jnp.newaxis]
 
@@ -161,7 +175,7 @@ def state_to_joint(
     if log_prob:
         s0 = jnp.clip(s0, offset, 1.0 - offset)
 
-    p = s0 / jnp.sum(s0, axis=0)
+    p = s0 / jnp.sum(s0, axis=0)[jnp.newaxis]
 
     ps = jnp.take(p, jnp.arange(1, w + 1), mode="wrap", axis=1)
 
