@@ -69,7 +69,7 @@ def test_joint_state(key: chex.PRNGKey, log_prob: bool, base: int):
     width = 100
 
     s0 = jax.random.uniform(key, (base, width))
-    s0 = utils.state_to_joint(s0, log_prob=log_prob)
+    s0 = utils.state_to_joint(s0, convert_log_prob=log_prob)
 
     if log_prob:
         s0 = jnp.exp(s0)

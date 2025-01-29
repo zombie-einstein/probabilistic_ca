@@ -6,7 +6,14 @@ import jax.numpy as jnp
 import jax_tqdm
 from jax.experimental import checkify
 
-from .utils import permutations
+from .state import StateInit
+from .utils import (
+    OFFSET,
+    permutations,
+    rule_arr,
+    rule_to_joint,
+    state_to_joint,
+)
 
 
 def log_p_joint(p: chex.Array, s: chex.Array) -> chex.Array:
@@ -16,7 +23,8 @@ def log_p_joint(p: chex.Array, s: chex.Array) -> chex.Array:
     pr = p[s2, s3].take(jnp.arange(1, w + 1), mode="wrap", axis=0)
     pn = p[s1, s2]
 
-    pd1 = jax.nn.logsumexp(p[s1], axis=0)
+    pd1 = jax.nn.logsumexp(p[:, s1], axis=0)
+    pd1 = pd1.take(jnp.arange(-1, w - 1), mode="wrap", axis=0)
     pd2 = jax.nn.logsumexp(p[s2], axis=0)
     pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=0)
 
@@ -30,12 +38,13 @@ def p_joint(p: chex.Array, s: chex.Array) -> chex.Array:
     pr = p[s2, s3].take(jnp.arange(1, w + 1), mode="wrap", axis=0)
     pn = p[s1, s2]
 
-    pd1 = jnp.sum(p[s1], axis=0)
+    pd1 = jnp.sum(p[:, s1], axis=0)
+    pd1 = pd1.take(jnp.arange(-1, w - 1), mode="wrap", axis=0)
     pd2 = jnp.sum(p[s2], axis=0)
     pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=0)
     pd = pd1 * pd2
 
-    return jnp.where(pd != 0, pl * pr * pn / pd, 0.0)
+    return jnp.where(pd > 0.0, pl * pr * pn / pd, 0.0)
 
 
 @partial(jax.jit, static_argnames=("n_steps", "log_prob", "show_progress"))
@@ -109,3 +118,29 @@ def run_model(
     _, result = jax.lax.scan(step, (p0, rule_joint), jnp.arange(n_steps))
 
     return result
+
+
+def run_rule(
+    rule: int,
+    width: int,
+    steps: int,
+    init_fn: StateInit,
+    log_prob: bool = True,
+    offset: float = OFFSET,
+    seed: int = 101,
+    show_progress: bool = True,
+) -> chex.Array:
+    r = rule_arr(
+        rule,
+        perturbations=None,
+        log_prob=log_prob,
+        offset=offset,
+    )
+
+    j = rule_to_joint(r, log_prob=log_prob)
+
+    k = jax.random.PRNGKey(seed)
+    rand_probs = init_fn(k, width)
+    s_test = state_to_joint(rand_probs, convert_log_prob=log_prob, offset=OFFSET)
+
+    return run_model(j, s_test, steps, log_prob=log_prob, show_progress=show_progress)

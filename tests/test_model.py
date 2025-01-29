@@ -15,7 +15,7 @@ def test_model_run(log_prob: bool) -> None:
     k = jax.random.PRNGKey(101)
     rand_probs = jax.random.choice(k, jnp.array([0.0, 1.0]), (width,))
     rand_probs = jnp.vstack([rand_probs, 1.0 - rand_probs])
-    s0 = ca.state_to_joint(rand_probs, log_prob=log_prob)
+    s0 = ca.state_to_joint(rand_probs, convert_log_prob=log_prob)
     out = ca.run_model(j, s0, steps, log_prob=log_prob, show_progress=False)
 
     assert out.shape == (steps, 2, 2, width)

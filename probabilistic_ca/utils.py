@@ -148,10 +148,10 @@ def rule_to_joint(r_arr: chex.Array, log_prob: bool = True) -> chex.Array:
     return jax.vmap(inner_unroll)(idxs_2).reshape(n_states, n_states, -1)
 
 
-@partial(jax.jit, static_argnames=("log_prob",))
+@partial(jax.jit, static_argnames=("convert_log_prob",))
 def state_to_joint(
     s0: jnp.ndarray,
-    log_prob=True,
+    convert_log_prob=True,
     offset: float = OFFSET,
 ) -> jnp.ndarray:
     """
@@ -163,7 +163,7 @@ def state_to_joint(
 
     Args:
         s0: 2d array of probabilistic initial state.
-        log_prob: `True` if using log-probabilities
+        convert_log_prob: `True` if using log-probabilities
         offset: Offset applied to log probabilities
 
     Returns:
@@ -172,7 +172,7 @@ def state_to_joint(
     w = s0.shape[1]
     n = s0.shape[0]
 
-    if log_prob:
+    if convert_log_prob:
         s0 = jnp.clip(s0, offset, 1.0 - offset)
 
     p = s0 / jnp.sum(s0, axis=0)[jnp.newaxis]
@@ -183,7 +183,7 @@ def state_to_joint(
         jnp.arange(n)
     )
 
-    if log_prob:
+    if convert_log_prob:
         return jnp.log(p0)
     else:
         return p0

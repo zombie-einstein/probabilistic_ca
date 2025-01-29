@@ -23,16 +23,16 @@ def test_metrics(log_prob: bool):
     k = jax.random.PRNGKey(101)
     rand_probs = jax.random.choice(k, jnp.array([0.0, 1.0]), (width,))
     rand_probs = jnp.vstack([rand_probs, 1.0 - rand_probs])
-    s0 = ca.state_to_joint(rand_probs, log_prob=log_prob)
+    s0 = ca.state_to_joint(rand_probs, convert_log_prob=log_prob)
     out = ca.run_model(j, s0, steps, log_prob=log_prob, show_progress=False)
 
-    mi = ca.mutual_information(out, log_prob=log_prob)
+    mi = ca.metrics.mutual_information(out, log_prob=log_prob)
     assert mi.shape == (steps, width)
 
-    ent = ca.entropy(out, log_prob=log_prob)
+    ent = ca.metrics.entropy(out, log_prob=log_prob)
     assert ent.shape == (steps, width)
 
-    probs = ca.state_probabilities(out, log_prob=log_prob)
+    probs = ca.metrics.state_probabilities(out, log_prob=log_prob)
 
     if log_prob:
         probs = jnp.exp(probs)
@@ -40,7 +40,7 @@ def test_metrics(log_prob: bool):
     assert probs.shape == (steps, 2, width)
     assert jnp.allclose(jnp.sum(probs, axis=1), 1.0)
 
-    state_probs = ca.state_joint_probabilities(out[-1], log_prob=log_prob)
+    state_probs = ca.metrics.state_joint_probabilities(out[-1], log_prob=log_prob)
 
     if log_prob:
         state_probs = jnp.exp(state_probs)

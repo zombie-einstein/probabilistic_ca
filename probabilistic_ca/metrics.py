@@ -10,9 +10,9 @@ from .utils import number_to_base, permutations
 
 @partial(jax.jit, static_argnames=("log_prob",))
 def mutual_information(
-    probs: jnp.ndarray,
+    probs: chex.Array,
     log_prob: bool = True,
-) -> jnp.ndarray:
+) -> chex.Array:
     """
     Get mutual information from joint probabilities.
 
@@ -26,18 +26,15 @@ def mutual_information(
     """
 
     n_states = probs.shape[1]
-    w = probs.shape[3]
     f_perms = checkify.checkify(permutations)
     errs, idxs_2 = f_perms(n_states, 2)
-    idxs_2 = jnp.flip(idxs_2, axis=1)
 
     if log_prob:
 
         def inner_mutual_info(i):
             s1, s2 = i
             pd1 = jax.nn.logsumexp(probs[:, s1], axis=1)
-            pd2 = jax.nn.logsumexp(probs[:, s2], axis=1)
-            pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=1)
+            pd2 = jax.nn.logsumexp(probs[:, :, s2], axis=1)
             norm = pd1 + pd2
             p = probs[:, s1, s2]
             return jnp.exp(p) * (p - norm)
@@ -47,21 +44,21 @@ def mutual_information(
         def inner_mutual_info(i):
             s1, s2 = i
             pd1 = jnp.sum(probs[:, s1], axis=1)
-            pd2 = jnp.sum(probs[:, s2], axis=1)
-            pd2 = pd2.take(jnp.arange(1, w + 1), mode="wrap", axis=1)
+            pd2 = jnp.sum(probs[:, :, s2], axis=1)
             norm = pd1 * pd2
             p = probs[:, s1, s2]
-            return jnp.where(p > 0.0, p * jnp.log(p / norm), 0.0)
+            return jnp.where(norm > 0.0, p * jnp.log(p / norm), 0.0)
 
     mi = jax.vmap(inner_mutual_info)(idxs_2)
+
     return jnp.sum(mi, axis=0)
 
 
 @partial(jax.jit, static_argnames=("log_prob",))
 def state_probabilities(
-    probs: jnp.ndarray,
+    probs: chex.Array,
     log_prob: bool = True,
-) -> jnp.ndarray:
+) -> chex.Array:
     """
     Get individual state probabilities from joint probabilities.
 
@@ -75,17 +72,17 @@ def state_probabilities(
     """
 
     if log_prob:
-        return jax.nn.logsumexp(probs, axis=1)
+        return jax.nn.logsumexp(probs, axis=2)
 
     else:
-        return jnp.sum(probs, axis=1)
+        return jnp.sum(probs, axis=2)
 
 
 @partial(jax.jit, static_argnames=("log_prob",))
 def entropy(
-    probs: jnp.ndarray,
+    probs: chex.Array,
     log_prob: bool = True,
-) -> jnp.ndarray:
+) -> chex.Array:
     """
     Get entropy series from joint probabilities.
 
