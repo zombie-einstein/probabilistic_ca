@@ -8,7 +8,7 @@ import jax.numpy as jnp
 class StateInit(ABC):
     @abstractmethod
     def __call__(self, k: chex.PRNGKey, width: int) -> chex.Array:
-        ...
+        pass
 
 
 class RandomChoice(StateInit):

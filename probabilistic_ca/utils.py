@@ -105,6 +105,49 @@ def rule_arr(
     return rp
 
 
+def totalistic_rule_arr(
+    n,
+    base=2,
+    log_prob: bool = True,
+    offset: float = OFFSET,
+) -> chex.Array:
+    """
+    Generate an array representing a ca-rule with possible deviations from that
+    rule to create probabilistic update rules
+
+    Args:
+        n (int): Rule number to use as a base rule
+        base (int): Rule possible states, default 2
+        log_prob (bool): If true small perturbations will be added
+            to zero values to avoid logarithm issues
+        offset (float): Value to offset by if `log_prob=True`
+
+    Returns:
+        2-D array representing the CA rule
+    """
+    r = number_to_base(n, base=base, width=base * 3)
+    n_states = base**3
+    t = jax.vmap(lambda i: number_to_base(i, base=base, width=3))(jnp.arange(n_states))
+    t = jnp.sum(t, axis=1)
+    r = r.at[t].get()
+
+    out_shape = (n_states, base)
+
+    rp = jnp.zeros(out_shape)
+    rp = rp.at[jnp.arange(n_states), r].set(1.0)
+
+    if log_prob:
+        rp = jnp.clip(rp, offset, 1.0 - offset)
+
+    norm = jnp.sum(rp, axis=1)
+    rp = rp / norm[:, jnp.newaxis]
+
+    if log_prob:
+        rp = jnp.log(rp)
+
+    return rp
+
+
 @partial(jax.jit, static_argnames=("log_prob",))
 def rule_to_joint(r_arr: chex.Array, log_prob: bool = True) -> chex.Array:
     """
@@ -150,10 +193,10 @@ def rule_to_joint(r_arr: chex.Array, log_prob: bool = True) -> chex.Array:
 
 @partial(jax.jit, static_argnames=("convert_log_prob",))
 def state_to_joint(
-    s0: jnp.ndarray,
+    s0: chex.Array,
     convert_log_prob=True,
     offset: float = OFFSET,
-) -> jnp.ndarray:
+) -> chex.Array:
     """
     Convert an initial state to joint probability array.
 
